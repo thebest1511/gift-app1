@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TON Gifts Live</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background: #121212; color: #fff; font-family: Arial; padding: 15px; margin: 0; }
+        h2 { text-align: center; }
+        .tabs { display: flex; margin: 20px 0; gap: 10px; }
+        .tab { flex: 1; padding: 12px; background: #333; text-align: center; border-radius: 8px; cursor: pointer; }
+        .tab.active { background: #007bff; }
+        .card { background: #1e1e1e; border-radius: 12px; padding: 15px; margin-bottom: 15px; display: flex; align-items: center; gap: 15px; }
+        .card img { width: 80px; height: 80px; border-radius: 8px; object-fit: cover; }
+        .info { flex: 1; }
+        .price { font-size: 1.2em; font-weight: bold; color: #00ff00; }
+        .floor { font-size: 0.9em; color: #aaa; }
+        .market { font-size: 0.9em; color: #4caf50; }
+        .loading { text-align: center; padding: 20px; }
+    </style>
+</head>
+<body>
+    <h2>🔥 TON Gifts — Живые листинги</h2>
+
+    <div class="tabs">
+        <div class="tab active" onclick="loadTab('listing')">Листинг</div>
+        <div class="tab" onclick="loadTab('sales')">Продажа</div>
+        <div class="tab" onclick="loadTab('rent')">Аренда</div>
+    </div>
+
+    <div id="content">
+        <div class="loading">Загрузка новых листингов...</div>
+    </div>
+
+    <script>
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+
+        async function loadListings() {
+            try {
+                const resp = await fetch("https://tonapi.io/v2/events?limit=50");
+                const data = await resp.json();
+                const events = data.events || [];
+
+                let listings = [];
+
+                for (let event of events) {
+                    const actions = event.actions || [];
+                    for (let action of actions) {
+                        if (action.type === "NftItemSalePlace") {
+                            const sale = action.NftItemSalePlace;
+                            const nft = sale.nft;
+                            const price = (sale.price.value / 1000000000).toFixed(2);
+
+                            const nftResp = await fetch(`https://tonapi.io/v2/nfts/${nft}`);
+                            const nftData = await nftResp.json();
+
+                            const metadata = nftData.metadata || {};
+                            const name = metadata.name || "Gift";
+                            const collection = nftData.collection || {};
+                            const collectionName = collection.name || "Unknown";
+
+                            const previews = nftData.previews || [];
+                            const image = previews.reverse().find(p => p.url)?.url || "";
+
+                            const floorResp = await fetch(`https://tonapi.io/v2/nft/collections/${collection.address}/floor_price`);
+                            const floorData = await floorResp.json();
+                            const floor = floorData.floor_price ? (floorData.floor_price / 1000000000).toFixed(2) : "—";
+
+                            listings.push({
+                                name, collectionName, price, floor, image, address: nft
+                            });
+                        }
+                    }
+                }
+
+                let html = "";
+                if (listings.length === 0) {
+                    html = "<div class='loading'>Пока нет новых листингов</div>";
+                } else {
+                    for (let l of listings.slice(0, 20)) {
+                        html += `
+                        <div class="card">
+                            <img src="${l.image || 'https://via.placeholder.com/80'}" alt="gift">
+                            <div class="info">
+                                <div>[${l.collectionName}]</div>
+                                <div>${l.name}</div>
+                                <div class="price">${l.price} TON</div>
+                                <div class="floor">Флор: ${l.floor} TON</div>
+                                <div class="market">GetGems/Tonnel</div>
+                            </div>
+                        </div>`;
+                    }
+                }
+                document.getElementById("content").innerHTML = html;
+            } catch (e) {
+                document.getElementById("content").innerHTML = "<div class='loading'>Ошибка загрузки. Попробуй позже.</div>";
+            }
+        }
+
+        function loadTab(tab) {
+            // Пока только листинг работает полностью
+            if (tab === 'listing') loadListings();
+        }
+
+        // Автообновление каждые 20 секунд
+        loadListings();
+        setInterval(loadListings, 20000);
+    </script>
+</body>
+</html>
